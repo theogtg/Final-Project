@@ -1,0 +1,427 @@
+//Microinstruction code for project
+//Alex Nardozzi
+//Tyler Griffith
+//Yon Belayhun
+//
+//Compile with "gmac mic_mac.gm -o memory" in linus-public
+//Look at Master Clock notes to see how to set up resulting file
+
+
+microcode bank[35:16] CS.m1;
+microcode bank[15:0] CS.m2;
+
+//Field Definitions
+field nxtAddr[35:27];
+
+field jmpc[26];
+field jamn[25];
+field jamz[24];
+
+field sh[23:22]={
+   nsh=0,
+   shr1=1,
+   shl8=2,
+   notused=3
+};
+
+field alu[21:20]={   
+   and=0,            
+   or=1,
+   noOp=1,
+   notB=2,
+   add=3,
+   sub=3
+};
+
+field ena[19];
+field enb[18];
+field inva[17];
+field inc[16];
+field c[15:7]={h=256, opc=128, tos=64, cpp=32, lv=16, sp=8, pc=4, mdr=2, mar=1};
+field wr[6];
+field rd[5];
+field fetch[4];
+field b[3:0]={ mdr=0, pc=1, mbr=2, mbru=3, sp=4, lv=5, cpp=6, tos=7, opc=8 };
+
+begin microcode@0
+
+NOP:                                                  nxtAddr=0x2;     //000: goto 0x2
+F:         c=pc alu=add inc enb b=pc                  nxtAddr=0x23;  //001: PC=PC+1; goto ____  
+MAIN:      c=pc inc alu=add enb b=pc fetch jmpc       nxtAddr=0x00;   //002: PC=PC+1; fetch; goto (MBR)
+           c=h enb b=tos alu=noOp                     nxtAddr=0x4;     //003: H=TOS; goto 0x4
+           c=tos c=mdr ena enb b=mdr alu=add wr       nxtAddr=0x2;     //004: TOS=MDR=H+MDR; wr; goto 0x2
+           c=h b=mbru ena enb alu=or                  nxtAddr=0x6;     //005: H=MBRU or H                   LDC3
+           c=mar b=cpp ena enb alu=add rd             nxtAddr=0x17;    //006: MAR=H+CPP; rd; goto iload3    LDC4
+           c=mar b=sp enb alu=noOp                    nxtAddr=0x8;     //007: MAR=SP                        SWAP2
+           c=h b=mdr enb alu=noOp wr                  nxtAddr=0x9;     //008: H=MDR; wr                     SWAP3
+           c=mdr b=tos enb alu=noOp                   nxtAddr=0xA;     //009: MDR=TOS                       SWAP4
+           c=mar b=sp enb inva alu=sub wr             nxtAddr=0xB;     //00A: MAR=SP-1; wr                  SWAP5
+           c=tos ena alu=noOp                         nxtAddr=0x2;     //00B: TOS=H; goto Main1             SWAP6
+           c=mdr c=tos b=mdr ena enb wr               nxtAddr=0x2;     //00C: MDR=TOS=MDR AND H;wr;go Main  IAND3
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0x2;     //00D: TOS=MDR; goto Main1           POP3
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0xF;     //00E: TOS=MDR                       IFEQ3
+           jamz b=opc alu=noOp                        nxtAddr=0x1;     //00F: Z=OPC;if(Z)gotoT;else gotoF   IFEQ4
+BIPUSH:    c=sp c=mar enb inc b=sp alu=add            nxtAddr=0x11;    //010: SP=MAR=SP+1; goto ____
+           c=pc enb inc b=pc alu=add fetch            nxtAddr=0x12;     //011: PC=PC+1; fetch;               BIPUSH2
+           c=mdr c=tos b=mbr wr                       nxtAddr=0x2;     //012: MDR=TOS=MBR; wr; goto Main1   BIPUSH3
+LDC_W:     c=pc enb b=pc inc alu=add fetch            nxtAddr=0x14;    //013: PC=PC+1; fetch; goto ____
+           c=h b=mbru sh=shl8 alu=noOp                nxtAddr=0x5;     //014: H=MBRU << 8                   LCD2
+ILOAD:     c=h enb b=lv alu=noOp                      nxtAddr=0x16;    //015: H=LV; goto ____
+           c=mar b=mbru ena enb alu=add rd            nxtAddr=0x17;    //016: MAR=MBRU+H; rd                ILOAD2
+           c=mar c=sp b=sp enb inc alu=add            nxtAddr=0x18;    //017: MAR=SP=SP+1;                  ILOAD3
+           c=pc b=pc enb inc alu=add fetch wr         nxtAddr=0x19;    //018: PC=PC+1; fetch; wr            ILOAD4
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0x2;     //019: TOS=MDR; goto Main1           ILOAD5
+           alu=noOp                                   nxtAddr=0x2;     //01A: Goto Main1                    GOTO6
+           c=h b=mbru ena enb alu=or                  nxtAddr=0x1C;    //01B: H=MBRU OR H                   INVIRT15
+           c=mdr b=sp ena enb inc alu=add wr          nxtAddr=0x1D;    //01C: MDR=SP+H+1; wr                INVIRT16
+           c=mar c=sp b=mdr enb alu=noOp              nxtAddr=0x1E;    //01D: MAR=SP=MDR                    INVIRT17
+           c=mdr b=opc enb alu=noOp wr                nxtAddr=0x1F;    //01E: MAR=OPC; wr                   INVIRT18
+           c=mar c=sp b=sp enb inc alu=add            nxtAddr=0x20;    //01F: MAR=SP=SP+1                   INVIRT19
+           c=mdr b=lv enb alu=noOp wr                 nxtAddr=0x21;    //020: MDR=LV;  wr                   INVIRT20
+           c=pc b=pc enb inc alu=noOp fetch           nxtAddr=0x22;    //021: PC=PC+1; fetch                INVIRT21
+           c=lv b=tos enb alu=noOp                    nxtAddr=0x2;     //022: LV=TOS; goto Main1            INVIRT22
+           c=pc b=pc alu=add inc enb fetch            nxtAddr=0x24;    //023: PC=PC+1; fetch                F2
+           alu=noOp                                   nxtAddr=0x2;     //024: goto Main                     F3
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x26;    //025: H=MBRU << 8                   LOADSP2
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x27;    //026: PC=PC+1 fetch		    LOADSP3
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x28;    //027: H=MBRU OR H << 8		    LOADSP4
+           c=pc b=pc alu=add enb inc fetch            nxtAddr=0x29;    //028: PC=PC+1 fetch		    LOADSP5
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x2A;    //029: H=MBRU OR H << 8		    LOADSP6  
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x2B;    //02A: H=MBRU OR H		    LOADSP7
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x2C;    //02B: PC=PC+1 fetch  		    LOADSP8
+           c=sp ena alu=noOp                          nxtAddr=0x2;     //02C: SP=H goto main 	            LOADSP9
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x2E;    //02D:				    LOADLV2
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x2F;    //02E:				    LOADLV3
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x30;    //02F:				    LOADLV4
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x31;    //030:				    LOADLV5
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x32;    //031:			 	    LOADLV6
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x33;    //032:				    LOADLV7
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x34;    //033:				    LOADLV8
+           c=lv ena alu=noOp                          nxtAddr=0x2;     //034:				    LOADLV9
+                                                      nxtAddr=0xfe;    //035:
+ISTORE:    c=h alu=noOp enb b=lv                      nxtAddr=0x37;    //036: H=LV; goto ____
+           c=mar b=mbru ena enb alu=add rd            nxtAddr=0x38;    //037: MAR=MBRU+H; rd                ISTORE2
+           c=mdr b=tos enb alu=noOp wr                nxtAddr=0x39;    //038: MDR=TOS; wr                   ISTORE3
+           c=sp c=mar b=sp enb inva alu=sub rd        nxtAddr=0x3A;    //039: SP=MAR=SP-1; rd               ISTORE4
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x3B;    //03A: PC=PC+1; fetch                ISTORE5
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0x2;     //03B: TOS=MDR; goto Main1           ISTORE6
+                                                      nxtAddr=0xfe;    //03C:
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x3E;    //03D:				    LOADCPP2
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x3F;    //03E:				    LOADCPP3
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x40;    //03F:				    LOADCPP4	
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x41;    //040:				    LOADCPP5
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x42;    //041:				    LOADCPP6
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x43;    //042:				    LOADCPP7
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x44;    //043:				    LOADCPP8
+           c=cpp ena alu=noOp                         nxtAddr=0x2;     //044:				    LOADCPP9
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x46;    //045:				    LOADPC2
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x47;    //046:				    LOADPC3
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x48;    //047:				    LOADPC4	
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x49;    //048:				    LOADPC5
+           c=h b=mbru alu=or ena enb sh=shl8          nxtAddr=0x4A;    //049:				    LOADPC6
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x4B;    //04A:				    LOADPC7
+           c=pc ena alu=noOp                          nxtAddr=0x4C;    //04B:				    LOADPC8
+           alu=noOp                                   nxtAddr=0x2;     //04C:				    LOADPC9
+                                                      nxtAddr=0xfe;    //04D:
+                                                      nxtAddr=0xfe;    //04E:
+                                                      nxtAddr=0xfe;    //04F:
+                                                      nxtAddr=0xfe;    //050:
+                                                      nxtAddr=0xfe;    //051:
+                                                      nxtAddr=0xfe;    //052:
+                                                      nxtAddr=0xfe;    //053:
+                                                      nxtAddr=0xfe;    //054:
+                                                      nxtAddr=0xfe;    //055:
+                                                      nxtAddr=0xfe;    //056:
+POP:       c=sp c=mar enb alu=sub b=sp inva rd        nxtAddr=0x58;    //057: SP=MAR=SP-1; rd; goto ____
+           alu=noOp                                   nxtAddr=0xD;     //058:                               POP2
+DUP:       c=sp c=mar alu=add enb b=sp inc            nxtAddr=0x5A;    //059: SP=MAR=SP+1; goto ____
+           c=mdr b=tos enb alu=noOp wr                nxtAddr=0x2;     //05A: MDR=TOS; wr; goto Main1       DUP2
+                                                      nxtAddr=0xfe;    //05B: 
+                                                      nxtAddr=0xfe;    //05C:
+                                                      nxtAddr=0xfe;    //05D:
+                                                      nxtAddr=0xfe;    //05E:
+SWAP:      c=mar alu=sub enb b=sp rd                  nxtAddr=0x7;     //05F: MAR=SP-1; rd; goto ____
+IADD:      c=sp c=mar alu=sub enb b=sp inva rd        nxtAddr=0x3;     //060: SP=MAR=SP-1; rd; goto 0x3 
+                                                      nxtAddr=0xfe;    //061:
+                                                      nxtAddr=0xfe;    //062:
+                                                      nxtAddr=0xfe;    //063:
+ISUB:      c=sp c=mar alu=sub ena enb b=sp inva rd    nxtAddr=0x65;    //064: SP=MAR=SP-1; rd; goto ____
+           c=h b=tos enb alu=noOp                     nxtAddr=0x66;    //065: H=TOS                         ISUB2
+           c=mdr c=tos b=mdr ena enb inva inc alu=sub wr               nxtAddr=0x2;     //066: MDR=TOS=MDR-H; wr; goto Main1    ISUB3
+                                                      nxtAddr=0xfe;    //067: goto 0xFE
+                                                      nxtAddr=0xfe;    //068: goto 0xFE
+                                                      nxtAddr=0xfe;    //069: goto 0xFE
+                                                      nxtAddr=0xfe;    //06A: goto 0xFE
+                                                      nxtAddr=0xfe;    //06B: goto 0xFE
+                                                      nxtAddr=0xfe;    //06C: goto 0xFE
+                                                      nxtAddr=0xfe;    //06D: goto 0xFE
+                                                      nxtAddr=0xfe;    //06E: goto 0xFE
+                                                      nxtAddr=0xfe;    //06F: goto 0xFE
+                                                      nxtAddr=0xfe;    //070: goto 0xFE
+                                                      nxtAddr=0xfe;    //071: goto 0xFE
+                                                      nxtAddr=0xfe;    //072: goto 0xFE
+                                                      nxtAddr=0xfe;    //073: goto 0xFE
+                                                      nxtAddr=0xfe;    //074: goto 0xFE
+LOADPC:	   c=pc b=pc enb inc alu=add fetch            nxtAddr=0x45;    //075: goto 0xFE
+LOADLV:    c=pc b=pc enb inc alu=add fetch            nxtAddr=0x2D;    //076: goto 0xFE
+LOADSP:    c=pc b=pc enb inc alu=add fetch            nxtAddr=0x25;    //077: goto 0xFE
+LOADCPP:   c=pc b=pc enb inc alu=add fetch            nxtAddr=0x3D;    //078: goto 0xFE
+                                                      nxtAddr=0xfe;    //079: goto 0xFE
+                                                      nxtAddr=0xfe;    //07A: goto 0xFE
+                                                      nxtAddr=0xfe;    //07B: goto 0xFE
+                                                      nxtAddr=0xfe;    //07C: goto 0xFE
+                                                      nxtAddr=0xfe;    //07D: goto 0xFE
+IAND:      c=sp c=mar alu=sub enb b=sp inva rd        nxtAddr=0x7F;    //07E: SP=MAR=SP-1; rd; goto ____
+           c=h b=tos enb alu=noOp                     nxtAddr=0xC;     //07F: H=TOS                         IAND2
+IOR:       c=sp c=mar alu=sub enb b=sp inva rd        nxtAddr=0x81;    //080: SP=MAR=SP-1; rd; goto ____
+           c=h b=tos enb alu=noOp                     nxtAddr=0x82;    //081: H=TOS                         IOR2
+           c=mdr c=tos b=mdr ena enb alu=or wr        nxtAddr=0x2;     //082: MDR=TOS=MDR OR H;wr;go Main   IOR3
+                                                      nxtAddr=0xfe;    //083: goto 0xFE
+IINC:      c=h alu=noOp enb b=lv                      nxtAddr=0x85;    //084: H=LV; goto _____ 
+           c=mar b=mbru ena enb alu=add rd            nxtAddr=0x86;    //085: MAR=MBRU+H; rd                IINC2
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x87;    //086: PC=PC+1; fetch                IINC3
+           c=h b=mdr enb alu=noOp                     nxtAddr=0x88;    //087: H=MDR                         IINC4
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0x89;    //088: PC=PC+1; fetch                IINC5
+           c=mdr b=mbr ena enb alu=add wr             nxtAddr=0x2;     //089: MDR=MBR+H; wr; go Main        IINC6
+                                                      nxtAddr=0xfe;    //08A: goto 0xFE
+                                                      nxtAddr=0xfe;    //08B: goto 0xFE
+                                                      nxtAddr=0xfe;    //08C: goto 0xFE
+                                                      nxtAddr=0xfe;    //08D: goto 0xFE
+                                                      nxtAddr=0xfe;    //08E: goto 0xFE
+                                                      nxtAddr=0xfe;    //08F: goto 0xFE
+                                                      nxtAddr=0xfe;    //090: goto 0xFE
+                                                      nxtAddr=0xfe;    //091: goto 0xFE
+                                                      nxtAddr=0xfe;    //092: goto 0xFE
+                                                      nxtAddr=0xfe;    //093: goto 0xFE
+                                                      nxtAddr=0xfe;    //094: goto 0xFE
+                                                      nxtAddr=0xfe;    //095: goto 0xFE
+                                                      nxtAddr=0xfe;    //096: goto 0xFE
+                                                      nxtAddr=0xfe;    //097: goto 0xFE
+                                                      nxtAddr=0xfe;    //098: goto 0xFE
+IFEQ:      c=sp c=mar alu=sub enb b=sp inva rd        nxtAddr=0x9A;    //099: SP=MAR=SP-1; rd; goto ____
+           c=opc b=tos enb alu=noOp                   nxtAddr=0xE;     //09A: OPC=TOS                       IFEQ2
+IFLT:      c=sp c=mar alu=sub enb b=sp inva  rd       nxtAddr=0x9C;    //09B: SP=MAR=SP-1; rd; goto ____
+           c=opc b=tos enb alu=noOp                   nxtAddr=0x9D;    //09C: OPC=TOS                       IFLT2
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0x9E;    //09D: TOS=MDR                       IFLT3
+           jamn b=opc alu=noOp                        nxtAddr=0x1;     //09E: N=OPC;if(N)gotoT;else gotoF   IFLT4
+IF_ICMPEQ: c=sp c=mar alu=sub enb b=sp inva rd        nxtAddr=0xA0;    //09F: SP=MAR=SP-1; rd; goto ____
+           c=mar c=sp b=sp enb inva alu=sub           nxtAddr=0xA1;    //0A0: MAR=SP=SP-1; rd               IFICMPEQ2
+           c=h b=mdr enb alu=noOp rd                  nxtAddr=0xA2;    //0A1: H=MDR; rd                     IFICMPEQ3
+           c=opc b=tos enb alu=noOp                   nxtAddr=0xA3;    //0A2: OPC=TOS                       IFICMPEQ4
+           c=tos b=mdr enb alu=noOp                   nxtAddr=0xA4;    //0A3: TOS=MDR                       IFICMPEQ5
+           b=opc ena enb inva inc alu=sub jamz        nxtAddr=0x1;     //0A4: Z=OPC-H; if(Z) goto T else F  IFICMPEQ6
+                                                      nxtAddr=0xfe;    //0A5: goto 0xFE
+                                                      nxtAddr=0xfe;    //0A6: goto 0xFE
+GOTO:      c=opc alu=sub enb b=pc inva                nxtAddr=0xA8;    //0A7: OPC=PC-1; goto ____
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0xA9;    //0A8: PC=PC+1 fetch                 GOTO2
+           c=h b=mbr sh=shl8 alu=noOp                 nxtAddr=0xAA;    //0A9: H=MBR << 8                    GOTO3
+           c=h b=mbru ena enb alu=or                  nxtAddr=0xAB;    //0AA: H=MBRU OR H                   GOTO4
+           c=pc b=opc ena enb alu=add fetch           nxtAddr=0x1A;    //0AB: PC=OPC+H; fetch               GOTO5
+IRETURN:   c=sp c=mar alu=noOp enb b=lv rd            nxtAddr=0xAD;    //0AC: SP=MAR=LV; rd; goto ____
+           alu=noOp                                   nxtAddr=0xAE;    //0AD:                               IRETURN2
+           c=lv c=mar b=mdr enb alu=noOp rd           nxtAddr=0xAF;    //0AE: LV=MAR=MDR; rd                IRETURN3
+           c=mar b=lv enb inc alu=add                 nxtAddr=0xB0;    //0AF: MAR=LV+1                      IRETURN4
+           c=pc b=mdr enb alu=noOp rd fetch           nxtAddr=0xB1;    //0B0: PC=MDR; rd; fetch             IRETURN5
+           c=mar b=sp enb alu=noOp                    nxtAddr=0xB2;    //0B1: MAR=SP                        IRETURN6
+           c=lv b=mdr enb alu=noOp                    nxtAddr=0xB3;    //0B2: LV=MDR                        IRETURN7
+           c=mdr b=tos enb alu=noOp wr                nxtAddr=0x2;     //0B3: MDR=TOS; wr; goto Main1       IRETURN8
+                                                      nxtAddr=0xfe;    //0B4: goto 0xFE
+                                                      nxtAddr=0xfe;    //0B5: goto 0xFE
+INV_VIR:   c=pc alu=add enb inc fetch                 nxtAddr=0xB7;    //0B6: PC=PC+1; fetch; goto ____ 
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0xB8;    //0B7: goto 0xFE                     INVIRT2-14
+           c=h b=mbru ena enb alu=or                  nxtAddr=0xB9;    //0B8: goto 0xFE
+           c=mar b=cpp ena enb alu=add rd             nxtAddr=0xBA;    //0B9: goto 0xFE
+           c=opc b=pc enb inc alu=add                 nxtAddr=0xBB;    //0BA: goto 0xFE
+           c=pc b=mdr enb alu=noOp fetch              nxtAddr=0xBC;    //0BB: goto 0xFE
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0xBD;    //0BC: goto 0xFE
+           c=h b=mbru sh=shl8 alu=noOp                nxtAddr=0xBE;    //0BD: goto 0xFE
+           c=h b=mbru ena enb alu=or                  nxtAddr=0xBF;    //0BE: goto 0xFE
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0xC0;    //0BF: goto 0xFE
+           c=tos b=sp ena enb inva inc alu=sub        nxtAddr=0xC1;    //0C0: goto 0xFE
+           c=tos c=mar b=tos enb inc alu=add          nxtAddr=0xC2;    //0C1: goto 0xFE
+           c=pc b=pc enb inc alu=add fetch            nxtAddr=0xC3;    //0C2: goto 0xFE
+           c=h b=mbru sh=shl8 alu=noOp                nxtAddr=0x1B;    //0C3: goto 0xFE
+WIDE:      c=pc alu=add enb b=pc inc fetch            nxtAddr=0xC5;    //0C4: PC=PC+1; fetch; goto ____ 
+           alu=noOp jmpc                              nxtAddr=0x100;   //0C5: goto (MBR OR 0X100)
+                                                      nxtAddr=0xfe;    //0C6: goto 0xFE
+                                                      nxtAddr=0xfe;    //0C7: goto 0xFE
+                                                      nxtAddr=0xfe;    //0C8: goto 0xFE
+                                                      nxtAddr=0xfe;    //0C9: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CA: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CB: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CC: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CD: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CE: goto 0xFE
+                                                      nxtAddr=0xfe;    //0CF: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D0: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D1: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D2: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D3: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D4: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D5: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D6: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D7: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D8: goto 0xFE
+                                                      nxtAddr=0xfe;    //0D9: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DA: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DB: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DC: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DD: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DE: goto 0xFE
+                                                      nxtAddr=0xfe;    //0DF: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E0: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E1: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E2: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E3: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E4: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E5: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E6: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E7: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E8: goto 0xFE
+                                                      nxtAddr=0xfe;    //0E9: goto 0xFE
+                                                      nxtAddr=0xfe;    //0EA: goto 0xFE
+                                                      nxtAddr=0xfe;    //0EB: goto 0xFE
+                                                      nxtAddr=0xfe;    //0EC: goto 0xFE
+                                                      nxtAddr=0xfe;    //0ED: goto 0xFE
+                                                      nxtAddr=0xfe;    //0EE: goto 0xFE
+                                                      nxtAddr=0xfe;    //0EF: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F0: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F1: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F2: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F3: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F4: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F5: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F6: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F7: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F8: goto 0xFE
+                                                      nxtAddr=0xfe;    //0F9: goto 0xFE
+                                                      nxtAddr=0xfe;    //0FA: goto 0xFE
+                                                      nxtAddr=0xfe;    //0FB: goto 0xFE
+                                                      nxtAddr=0xfe;    //0FC: goto 0xFE
+                                                      nxtAddr=0xfe;    //0FD: goto 0xFE
+                                                      nxtAddr=0xfe;    //0FE: goto 0xFE
+                                                      nxtAddr=0xFE;    //0FF: goto 0xFE
+                                                      nxtAddr=0xFE;    //100: goto 0xFE
+T:         c=opc alu=sub enb b=pc inva fetch          nxtAddr=0xA8;    //101: OPC=PC-1; fetch; goto ____
+                                                      nxtAddr=0xFE;    //102: goto 0xFE
+                                                      nxtAddr=0xFE;    //103: goto 0xFE
+                                                      nxtAddr=0xFE;    //104: goto 0xFE
+                                                      nxtAddr=0xFE;    //105: goto 0xFE
+                                                      nxtAddr=0xFE;    //106: goto 0xFE
+                                                      nxtAddr=0xFE;    //107: goto 0xFE
+                                                      nxtAddr=0xFE;    //108: goto 0xFE
+                                                      nxtAddr=0xFE;    //109: goto 0xFE
+                                                      nxtAddr=0xFE;    //10A: goto 0xFE
+                                                      nxtAddr=0xFE;    //10B: goto 0xFE
+                                                      nxtAddr=0xFE;    //10C: goto 0xFE
+                                                      nxtAddr=0xFE;    //10D: goto 0xFE
+                                                      nxtAddr=0xFE;    //10E: goto 0xFE
+                                                      nxtAddr=0xFE;    //10F: goto 0xFE
+                                                      nxtAddr=0xFE;    //110: goto 0xFE
+                                                      nxtAddr=0xFE;    //111: goto 0xFE
+                                                      nxtAddr=0xFE;    //112: goto 0xFE
+                                                      nxtAddr=0xFE;    //113: goto 0xFE
+                                                      nxtAddr=0xFE;    //114: goto 0xFE
+w_iload:   c=pc alu=add enb b=pc inc fetch            nxtAddr=0x116;   //115: PC=PC+1; fetch; goto ____
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x117;   //116: H=MBRU << 8                   WILOAD2
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x118;   //117: H=MBRU OR H                   WILOAD3
+           c=mar b=lv ena enb alu=add rd              nxtAddr=0x17;    //118: MAR=LV+H; rd; goto iload3     WILOAD4
+                                                      nxtAddr=0xFE;    //119: goto 0xFE
+                                                      nxtAddr=0xFE;    //11A: goto 0xFE
+                                                      nxtAddr=0xFE;    //11B: goto 0xFE
+                                                      nxtAddr=0xFE;    //11C: goto 0xFE
+                                                      nxtAddr=0xFE;    //11D: goto 0xFE
+                                                      nxtAddr=0xFE;    //11E: goto 0xFE
+                                                      nxtAddr=0xFE;    //11F: goto 0xFE
+                                                      nxtAddr=0xFE;    //120: goto 0xFE
+                                                      nxtAddr=0xFE;    //121: goto 0xFE
+                                                      nxtAddr=0xFE;    //122: goto 0xFE
+                                                      nxtAddr=0xFE;    //123: goto 0xFE
+                                                      nxtAddr=0xFE;    //124: goto 0xFE
+                                                      nxtAddr=0xFE;    //125: goto 0xFE
+                                                      nxtAddr=0xFE;    //126: goto 0xFE
+                                                      nxtAddr=0xFE;    //127: goto 0xFE
+                                                      nxtAddr=0xFE;    //128: goto 0xFE
+                                                      nxtAddr=0xFE;    //129: goto 0xFE
+                                                      nxtAddr=0xFE;    //12A: goto 0xFE
+                                                      nxtAddr=0xFE;    //12B: goto 0xFE
+                                                      nxtAddr=0xFE;    //12C: goto 0xFE
+                                                      nxtAddr=0xFE;    //12D: goto 0xFE
+                                                      nxtAddr=0xFE;    //12E: goto 0xFE
+                                                      nxtAddr=0xFE;    //12F: goto 0xFE
+                                                      nxtAddr=0xFE;    //130: goto 0xFE
+                                                      nxtAddr=0xFE;    //131: goto 0xFE
+                                                      nxtAddr=0xFE;    //132: goto 0xFE
+                                                      nxtAddr=0xFE;    //133: goto 0xFE
+                                                      nxtAddr=0xFE;    //134: goto 0xFE
+                                                      nxtAddr=0xFE;    //135: goto 0xFE
+w_istore:  c=pc alu=add enb b=pc inc fetch            nxtAddr=0x137;   //136: PC=PC+1; fetch; goto ____
+           c=h b=mbru alu=noOp sh=shl8                nxtAddr=0x138;   //137: H=MBRU << 8                   WISTORE2
+           c=h b=mbru alu=or ena enb                  nxtAddr=0x139;   //138: H=MBRU OR H                   WISTORE3
+           c=mar b=lv ena enb alu=add                 nxtAddr=0x38;    //139: MAR=LV+H; goto istore3        WISTORE4
+                                                      nxtAddr=0xFE;    //13A: goto 0xFE
+                                                      nxtAddr=0xFE;    //13B: goto 0xFE
+                                                      nxtAddr=0xFE;    //13C: goto 0xFE
+                                                      nxtAddr=0xFE;    //13D: goto 0xFE
+                                                      nxtAddr=0xFE;    //13E: goto 0xFE
+                                                      nxtAddr=0xFE;    //13F: goto 0xFE
+      
+end
+    
+
+macrocode bank[7:0] RAM;
+     
+operands byte{#1={+1=#1[7:0];};};
+operands varnum{#1 = {+1=#1[7:0]; }; };
+operands varnumconst{#1,#2 = {+1=#1[7:0]; +2=#2[7:0]; }; };
+operands noop{- = {};};
+operands offset{#1 = {+1=#1@[15:8];+2=#1@[7:0]; }; };
+operands disp{#1 = {+1=#1[15:8];+2=#1[7:0]; }; };
+operands index{#1 = {+1=#1[15:8];+2=#1[7:0]; }; };
+operands regValue{#1 = {+1=#1[31:24];+2=#1[23:16];+3=#1[15:8];+4=#1[7:0]; }; };
+
+op bipush{+0[7:0]=0x10; operands byte;};
+op dup{+0[7:0]=0x59; operands noop;};
+op goto{+0[7:0]=0xA7; operands offset;};
+op iand{+0[7:0]=0x7E; operands noop;};
+op iadd{+0[7:0]=0x60; operands noop;};
+op ifeq{+0[7:0]=0x99; operands offset;};
+op iflt{+0[7:0]=0x9B; operands offset;};
+op if_icmpeq{+0[7:0]=0x9F; operands offset;};
+op iinc{+0[7:0]=0x9B; operands varnumconst;};
+op iload{+0[7:0]=0x15; operands varnum;};
+op invokevirtual{+0[7:0]=0x9B; operands disp;};
+op ior{+0[7:0]=0xB0; operands noop;};
+op ireturn{+0[7:0]=0xAC; operands noop;};
+op istore{+0[7:0]=0x36; operands varnum;};
+op isub{+0[7:0]=0x64; operands noop;};
+op ldc_w{+0[7:0]=0x13; operands index;};
+op nop{+0[7:0]=0x00; operands noop;};
+op pop{+0[7:0]=0x57; operands noop;};
+op swap{+0[7:0]=0x5F; operands noop;};
+op wide{+0[7:0]=0xC4; operands noop;};
+op loadPC{+0[7:0]=0x75; operands regValue;};
+op loadLV{+0[7:0]=0x76; operands regValue;};
+op loadSP{+0[7:0]=0x77; operands regValue;};
+op loadCPP{+0[7:0]=0x78; operands regValue;};
+
+// macrocode
+
+begin macrocode @0
+lv: .symbol 0x10  //word address
+sp: .symbol 0x50          //word address
+pc: .symbol 0x80          //byte address which corresponds to 0x20 word address  
+i: .symbol  0x01  //specify the offset into the local store
+j: .symbol  0x02
+k: .symbol  0x03
+start:
+    nop
+    loadLV lv
+    loadSP sp
+    loadPC pc
+    iload i
+    iload j
+    iadd
+    istore i
+end
+
